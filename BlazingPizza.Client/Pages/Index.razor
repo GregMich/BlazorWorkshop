@@ -7,7 +7,8 @@
         {
             @foreach (var special in _specials)
             {
-                <li style="background-image: url('@special.ImageUrl')">
+                <li style="background-image: url('@special.ImageUrl')"
+                    @onclick="@(() => ShowConfiguringPizzaDialog(special))">
                     <div class="pizza-info">
                         <span class="title">@special.Name</span>
                         @special.Description
@@ -19,11 +20,88 @@
     </ul>
 </div>
 
-@code {
-    List<PizzaSpecial> _specials;
+@if (_showConfiguringPizza)
+{
+    <ConfigurePizzaDialog 
+        Pizza="_configuringPizza" 
+        OnCancel="CancelConfigurePizzaDialog" 
+        OnConfirm="ConfirmConfigurePizzaDialog">
+    </ConfigurePizzaDialog>
+}
+
+<div class="sidebar">
+    @if (_order.Pizzas.Any())
+    {
+        <div class="order-contents">
+            <h2>Your order</h2>
+
+            @foreach (var configuredPizza in _order.Pizzas)
+            {
+                <ConfiguredPizzaItem Pizza="configuredPizza" OnRemoved="@(() => RemoveConfiguredPizza(configuredPizza))" />
+            }
+        </div>
+    }
+    else
+    {
+        <div class="empty-cart">Choose a pizza<br>to get started</div>
+    }
+
+    <div class="order-total @(_order.Pizzas.Any() ? "" : "hidden")">
+        Total:
+        <span class="total-price">@_order.GetFormattedTotalPrice()</span>
+        <button class="btn btn-warning" disabled="@(_order.Pizzas.Count == 0)" @onclick="PlaceOrder">
+            Order >
+        </button>
+    </div>
+</div>
+
+@code 
+{
+    private List<PizzaSpecial> _specials;
+    private Pizza _configuringPizza;
+    private bool _showConfiguringPizza;
+    Order _order = new Order();
 
     protected override async Task OnInitializedAsync()
     {
         _specials = await _HttpClient.GetFromJsonAsync<List<PizzaSpecial>>("specials");
+    }
+
+    private void ShowConfiguringPizzaDialog(PizzaSpecial special)
+    {
+        Console.WriteLine("Show configuring pizza dialog event handler called");
+        _configuringPizza = new Pizza
+        {
+            Special = special,
+            SpecialId = special.Id,
+            Size = Pizza.DefaultSize,
+            Toppings = new List<PizzaTopping>()
+        };
+
+        _showConfiguringPizza = true;
+    }
+
+    private void CancelConfigurePizzaDialog()
+    {
+        _configuringPizza = null;
+        _showConfiguringPizza = false;
+    }
+
+    private void ConfirmConfigurePizzaDialog()
+    {
+        _order.Pizzas.Add(_configuringPizza);
+        _configuringPizza = null;
+        _showConfiguringPizza = false;
+    }
+
+    private void RemoveConfiguredPizza(Pizza pizza)
+    {
+        _order.Pizzas.Remove(pizza);
+    }
+
+    private async Task PlaceOrder()
+    {
+        await _HttpClient.PostAsJsonAsync("orders", _order);
+        _order = new Order();
     }
 }
