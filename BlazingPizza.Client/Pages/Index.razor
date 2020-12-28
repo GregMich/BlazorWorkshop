@@ -1,6 +1,8 @@
 ﻿@page "/"
 @inject HttpClient _HttpClient
- 
+@inject NavigationManager _NavigationManager
+@inject OrderState _OrderState 
+
 <div class="main">
     <ul class="pizza-cards">
         @if (_specials != null)
@@ -8,7 +10,7 @@
             @foreach (var special in _specials)
             {
                 <li style="background-image: url('@special.ImageUrl')"
-                    @onclick="@(() => ShowConfiguringPizzaDialog(special))">
+                    @onclick="@(() => _OrderState.ShowConfigurePizzaDialog(special))">
                     <div class="pizza-info">
                         <span class="title">@special.Name</span>
                         @special.Description
@@ -20,24 +22,24 @@
     </ul>
 </div>
 
-@if (_showConfiguringPizza)
+@if (_OrderState.ShowingConfigureDialog)
 {
     <ConfigurePizzaDialog 
-        Pizza="_configuringPizza" 
-        OnCancel="CancelConfigurePizzaDialog" 
-        OnConfirm="ConfirmConfigurePizzaDialog">
+        Pizza="_OrderState.ConfiguringPizza" 
+        OnCancel="_OrderState.CancelConfigurePizzaDialog" 
+        OnConfirm="_OrderState.ConfirmConfigurePizzaDialog">
     </ConfigurePizzaDialog>
 }
 
 <div class="sidebar">
-    @if (_order.Pizzas.Any())
+    @if (_OrderState.Order.Pizzas.Any())
     {
         <div class="order-contents">
             <h2>Your order</h2>
 
-            @foreach (var configuredPizza in _order.Pizzas)
+            @foreach (var configuredPizza in _OrderState.Order.Pizzas)
             {
-                <ConfiguredPizzaItem Pizza="configuredPizza" OnRemoved="@(() => RemoveConfiguredPizza(configuredPizza))" />
+                <ConfiguredPizzaItem Pizza="configuredPizza" OnRemoved="@(() => _OrderState.RemoveConfiguredPizza(configuredPizza))" />
             }
         </div>
     }
@@ -46,10 +48,10 @@
         <div class="empty-cart">Choose a pizza<br>to get started</div>
     }
 
-    <div class="order-total @(_order.Pizzas.Any() ? "" : "hidden")">
+    <div class="order-total @(_OrderState.Order.Pizzas.Any() ? "" : "hidden")">
         Total:
-        <span class="total-price">@_order.GetFormattedTotalPrice()</span>
-        <button class="btn btn-warning" disabled="@(_order.Pizzas.Count == 0)" @onclick="PlaceOrder">
+        <span class="total-price">@_OrderState.Order.GetFormattedTotalPrice()</span>
+        <button class="btn btn-warning" disabled="@(_OrderState.Order.Pizzas.Count == 0)" @onclick="PlaceOrder">
             Order >
         </button>
     </div>
@@ -58,50 +60,17 @@
 @code 
 {
     private List<PizzaSpecial> _specials;
-    private Pizza _configuringPizza;
-    private bool _showConfiguringPizza;
-    Order _order = new Order();
 
     protected override async Task OnInitializedAsync()
     {
         _specials = await _HttpClient.GetFromJsonAsync<List<PizzaSpecial>>("specials");
     }
 
-    private void ShowConfiguringPizzaDialog(PizzaSpecial special)
-    {
-        Console.WriteLine("Show configuring pizza dialog event handler called");
-        _configuringPizza = new Pizza
-        {
-            Special = special,
-            SpecialId = special.Id,
-            Size = Pizza.DefaultSize,
-            Toppings = new List<PizzaTopping>()
-        };
-
-        _showConfiguringPizza = true;
-    }
-
-    private void CancelConfigurePizzaDialog()
-    {
-        _configuringPizza = null;
-        _showConfiguringPizza = false;
-    }
-
-    private void ConfirmConfigurePizzaDialog()
-    {
-        _order.Pizzas.Add(_configuringPizza);
-        _configuringPizza = null;
-        _showConfiguringPizza = false;
-    }
-
-    private void RemoveConfiguredPizza(Pizza pizza)
-    {
-        _order.Pizzas.Remove(pizza);
-    }
-
     private async Task PlaceOrder()
     {
-        await _HttpClient.PostAsJsonAsync("orders", _order);
-        _order = new Order();
+        var response = await _HttpClient.PostAsJsonAsync("orders", _OrderState.Order);
+        var newOrderId = await response.Content.ReadFromJsonAsync<int>();
+        _OrderState.ResetOrder();
+        _NavigationManager.NavigateTo($"myorders/{newOrderId}");
     }
 }

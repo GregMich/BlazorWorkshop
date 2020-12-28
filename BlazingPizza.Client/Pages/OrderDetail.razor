@@ -1,0 +1,90 @@
+@page "/myorders/{orderId:int}"
+@using System.Threading
+@inject HttpClient _HttpClient
+@implements IDisposable
+
+<div class="main">
+    @if (_invalidOrder)
+    {
+        <h2>Nope</h2>
+        <p>Sorry, this order could not be loaded.</p>
+    }
+    else if (_orderWithStatus == null)
+    {
+        <text>Loading...</text>
+    }
+    else
+    {
+        <div class="track-order">
+            <div class="track-order-title">
+                <h2>
+                    Order placed @_orderWithStatus.Order.CreatedTime.ToLongDateString()
+                </h2>
+                <p class="ml-auto mb-0">
+                    Status: <strong>@_orderWithStatus.StatusText</strong>
+                </p>
+            </div>
+            <div class="track-order-body">
+                <div class="track-order-details">
+                    <OrderReview Order="_orderWithStatus.Order">
+
+                    </OrderReview>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code
+{
+    [Parameter] public int orderId { get; set; }
+
+    private OrderWithStatus _orderWithStatus;
+    private bool _invalidOrder;
+    private CancellationTokenSource _pollingCancellationToken;
+
+    // note that OnParameterSet will be called during initialization as well as on
+    // a change to parameters
+    protected override void OnParametersSet()
+    {
+        // if we were already polling for a seperate order, stop doing so
+        _pollingCancellationToken?.Cancel();
+
+        PollForUpdates();
+    }
+
+    private async void PollForUpdates()
+    {
+        _pollingCancellationToken = new CancellationTokenSource();
+        while (!_pollingCancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                _invalidOrder = false;
+                _orderWithStatus = await _HttpClient.GetFromJsonAsync<OrderWithStatus>($"orders/{orderId}");
+                StateHasChanged();
+
+                if (_orderWithStatus.IsDelivered)
+                {
+                    _pollingCancellationToken.Cancel();
+                }
+                else
+                {
+                    await Task.Delay(4000);
+                }
+            }
+            catch (Exception e)
+            {
+                _invalidOrder = true;
+                _pollingCancellationToken.Cancel();
+                Console.Error.WriteLine(e);
+                StateHasChanged();
+            }
+        }
+    }
+
+    void IDisposable.Dispose()
+    {
+        _pollingCancellationToken?.Cancel();
+    }
+}
