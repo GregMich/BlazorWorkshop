@@ -1,5 +1,5 @@
 @page "/myorders"
-@inject HttpClient _HttpClient
+@inject OrdersClient _OrdersClient
  
 <div class="main">
     @if (_ordersWithStatuses == null)
@@ -44,6 +44,6 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        _ordersWithStatuses = await _HttpClient.GetFromJsonAsync<List<OrderWithStatus>>("orders");
+        _ordersWithStatuses = await _OrdersClient.GetOrders();
     }
 }
